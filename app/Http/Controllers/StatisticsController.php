@@ -12,6 +12,11 @@ use Illuminate\Support\Facades\DB;
 
 class StatisticsController extends Controller
 {
+    public function __construct()
+    {
+        $this->middleware('auth:sanctum');
+    }
+
     public function index()
     {
         $data = array();

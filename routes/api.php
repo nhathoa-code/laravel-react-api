@@ -39,15 +39,11 @@ use App\Models\Category;
 |
 */
 
-Route::get('testapi',function(){
-    return Category::all();
-});
-
 Route::get('statistics/by_time',[StatisticsController::class,'statisticsByTime']);
 Route::get('statistics/access_times',[StatisticsController::class,'increaseAccessTime']);
 Route::get('statistics',[StatisticsController::class,'index']);
 
-Route::get('user',[AuthController::class,'show']);
+Route::get('user',[AuthController::class,'show'])->middleware('auth:sanctum');
 
 Route::get('admin',[AdminController::class,'show']);
 Route::post("admin/login", [AdminController::class, 'login']);

@@ -19,6 +19,10 @@ use Illuminate\Support\Facades\Auth;
 
 class ProductController extends Controller
 {
+    public function __construct()
+    {
+        $this->middleware('auth:sanctum')->only(['store','upload','update','destroy']);
+    }
     /**
      * Display a listing of the resource.
      */
@@ -80,7 +84,7 @@ class ProductController extends Controller
         $product->image = $request->file("p_image")->store("images/products/$dir");
         $product->specification = $request->input("specification");
         $product->description = $request->input("description");
-        $product->description_images = json_encode($request->session()->has("description_images") ? $request->session()->get("description_images") : array());
+        $product->description_images = $request->has("description_images") ? $request->get("description_images") : json_decode(array());
         if($request->has("home_display")){
             $product->home_display = 1;
         }
@@ -158,7 +162,6 @@ class ProductController extends Controller
                 ]);
             }
         }
-        $request->session()->forget("description_images");
         return response()->json(["message"=>"Thêm sản phẩm thành công"],200);
     }
 
@@ -167,13 +170,7 @@ class ProductController extends Controller
 
         $path = $request->file("file")->store("images/description_images");
 
-        if(!$request->session()->has("description_images")){
-            $request->session()->put('description_images', [$path]);
-        }else{
-            $request->session()->push('description_images', $path);
-        }
-
-        return response()->json(["image_url" => asset($path)]);
+        return response()->json(["image_url" => asset($path),"image_path" => $path]);
     }
 
     /**
@@ -308,9 +305,7 @@ class ProductController extends Controller
             }
         }
         $product->description_images = json_encode($new_description_images);
-        if($request->session()->has("description_images")){
-            $request->session()->forget("description_images");
-        }
+     
         $product->save();
 
 
@@ -520,6 +515,9 @@ class ProductController extends Controller
     public function destroy(Product $product)
     {
         Storage::deleteDirectory("images/products/$product->dir");
+        foreach(json_encode($product->description_images) as $description_image){
+            Storage::delete($description_image);
+        }
         $product->delete();
         return "OK";
     }

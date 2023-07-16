@@ -9,6 +9,10 @@ use Illuminate\Support\Facades\Storage;
 
 class PostController extends Controller
 {
+    public function __construct()
+    {
+        $this->middleware('auth:sanctum')->only(['store','update','destroy']);
+    }
     /**
      * Display a listing of the resource.
      */
@@ -44,7 +48,7 @@ class PostController extends Controller
             "product_id"=>$request->product_id,
             "post_category_id"=>$request->post_category,
             "post_thumbnail"=>$request->file("thumbnail")->store("images/post_thumbnails"),
-            "images"=> json_encode($request->session()->has("post_images") ? $request->session()->get("post_images") : array())
+            "images"=> $request->has("post_images") ? $request->get("post_images") : json_decode(array())
         ]); 
         $request->session()->forget("post_images");
         return response()->json(["message"=>"New post created successfully"]);
@@ -99,10 +103,8 @@ class PostController extends Controller
      */
     public function destroy(Post $post)
     {
-        preg_match_all('|<figure class="image">(.*)</figure>|U',$post->content,$matches);
-        foreach($matches[1] as $item){
-            preg_match("#images/post_images/(.)*.(png)|(jpg)#",$item,$match);
-            Storage::delete($match[0]);
+        foreach(json_encode($post->images) as $post_image){
+            Storage::delete($post_image);
         }
         $post->delete();
         return response()->json(["message"=>"post deleted successfully"],200);
@@ -111,12 +113,8 @@ class PostController extends Controller
     public function upload(Request $request)
     {
         $path = $request->file("file")->store("images/post_images");
-        if(!$request->session()->has("post_images")){
-            $request->session()->put('post_images', [$path]);
-        }else{
-            $request->session()->push('post_images', $path);
-        }
-        return response()->json(["image_url" => asset($path)]);
+       
+        return response()->json(["image_url" => asset($path),"image_path" => $path]);
     }
 
     public function incrementView(Post $post)

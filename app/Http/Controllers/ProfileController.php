@@ -8,6 +8,11 @@ use Illuminate\Support\Facades\DB;
 
 class ProfileController extends Controller
 {
+    public function __construct()
+    {
+        $this->middleware('auth:sanctum');
+    }
+    
     public function index()
     {
         $profile = DB::table("profiles")->where("user_id",Auth::user()->id)->first();

@@ -11,6 +11,10 @@ use Illuminate\Support\Facades\Storage;
 
 class ReviewToProveController extends Controller
 {
+    public function __construct()
+    {
+        $this->middleware('auth:sanctum')->only('store');
+    }
     /**
      * Display a listing of the resource.
      */

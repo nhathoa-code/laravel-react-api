@@ -8,6 +8,10 @@ use Illuminate\Support\Facades\Storage;
 
 class BrandController extends Controller
 {
+    public function __construct()
+    {
+        $this->middleware('auth:sanctum')->except("index");
+    }
     /**
      * Display a listing of the resource.
      */

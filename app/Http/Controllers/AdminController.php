@@ -12,6 +12,10 @@ use Illuminate\Support\Facades\Gate;
 
 class AdminController extends Controller
 {
+    public function __construct()
+    {
+        $this->middleware('auth:sanctum')->except(["login"]);
+    }
     /**
      * Display a listing of the resource.
      */
@@ -28,7 +32,7 @@ class AdminController extends Controller
      */
     public function store(Request $request)
     {
-        if (!Gate::forUser(Auth::guard('admin')->user())->allows('admin-action')) {
+        if (!Gate::forUser($request->user())->allows('admin-action')) {
             return response()->json(["message"=>"Bạn không phải là administrator, bạn không có quyền này ?"],403);
         }
         
@@ -50,14 +54,10 @@ class AdminController extends Controller
     /**
      * Display the specified resource.
      */
-    public function show()
+    public function show(Request $request)
     {
-        if(Auth::guard('admin')->check()){
-            $admin = Auth::guard('admin')->user()->load(['roles']);
-            return response()->json(['admin'=> $admin,'is_admin'=>$admin->is_admin],200);
-        }else{
-            return response()->json(['message'=>'unauthorized'],401);
-        }
+        $admin = $request->user()->load(['roles']);
+        return response()->json(['admin'=> $admin,'is_admin'=>$admin->is_admin],200);
     }
 
     /**
@@ -65,7 +65,7 @@ class AdminController extends Controller
      */
     public function update(Request $request, Admin $admin)
     {
-        if(Auth::guard('admin')->user()->is_admin){
+        if($request->user()->is_admin){
             $admin->name = $request->name;
             $admin->username = $request->username;
             if($request->password){
@@ -92,7 +92,7 @@ class AdminController extends Controller
             }
             return response()->json(["message"=>"Cập nhật tài khoản quản trị thành công.","edited_admin"=>$admin]);
         }else{
-            if(Auth::guard('admin')->user()->id === $admin->id){
+            if($request->user()->id === $admin->id){
                 $admin->password = Hash::make($request->password);
                 if($request->has("picture")){
                     if($admin->picture){
@@ -114,7 +114,7 @@ class AdminController extends Controller
      */
     public function destroy(Admin $admin)
     {
-        if (!Gate::forUser(Auth::guard('admin')->user())->allows('admin-action')) {
+        if (!Gate::forUser($request->user())->allows('admin-action')) {
             return response()->json(["message"=>"Bạn không phải là administrator, bạn không có quyền này ?"],403);
         }
         
@@ -134,8 +134,9 @@ class AdminController extends Controller
         ]);
  
         if (Auth::guard('admin')->attempt($credentials,true)) {
-            $request->session()->regenerate();
-            return Auth::guard('admin')->user()->load(['roles']);
+            $admin = Auth::guard('admin')->user();
+            $token = $admin->createToken('authToken')->plainTextToken;
+            return response()->json(["admin"=>$admin->load(['roles']),"auth_token"=>$token],200);
         }
         return response()->json(["message"=>"Username hoặc mật khẩu không đúng !"],401);
        
@@ -143,11 +144,7 @@ class AdminController extends Controller
 
     public function logout(Request $request)
     {
-        Auth::guard('admin')->logout();
- 
-        $request->session()->invalidate();
- 
-        $request->session()->regenerateToken();
+        $request->user()->tokens()->delete();
 
         return response()->json(["message"=>"logged out"],200);
     }
