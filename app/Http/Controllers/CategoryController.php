@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Category;
 use App\Models\Brand;
+use App\Models\Review;
 use App\Models\Product;
 use App\Models\CategoryAttribute;
 use App\Models\CategoryAttributeValue;
@@ -165,7 +166,14 @@ class CategoryController extends Controller
             }
             $category_id = $category->id;
             $data["productIds"] = DB::table("product_categories")->where("category_id",$category_id)->pluck("product_id");
-            $data["products"] = DB::table("products")->whereIn("id",$data["productIds"])->orderBy("id","desc")->paginate($request->products_per_page);
+            // $data["products"] = DB::table("products")->whereIn("id",$data["productIds"])->orderBy("id","desc")->paginate($request->products_per_page);
+
+            $data["products"] = tap(DB::table("products")->whereIn("id",$data["productIds"])->orderBy("id","desc")->paginate($request->products_per_page),function($paginatedInstance){
+            return $paginatedInstance->getCollection()->transform(function ($product) {
+                $product->reviews = array("average_star"=> (float)Review::where("product_id",$product->id)->avg("star"),"total_reviews"=>Review::where("product_id",$product->id)->count());
+                return $product;
+                });
+            });
             $data["category"] = Category::where("slug",$slug)->first();
         }
         $attributes = CategoryAttribute::where('category_id',$category_id)->get();

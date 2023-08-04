@@ -59,6 +59,7 @@ class CommentToReplyController extends Controller
             $comment->product_id = $comment_to_reply->product_id;
             $comment->commenter = $comment_to_reply->commenter;
             $comment->content = $comment_to_reply->content;
+            $comment->created_at = $comment_to_reply->created_at;
             $comment->save();
             $comment_reply = new Comment();
             $comment_reply->product_id = $request->product_id;
@@ -73,6 +74,7 @@ class CommentToReplyController extends Controller
             $comment->product_id = $comment_to_reply->product_id;
             $comment->commenter = $comment_to_reply->commenter;
             $comment->content = $comment_to_reply->content;
+            $comment->created_at = $comment_to_reply->created_at;
             $comment->reply_to = $request->comment_id;
             $comment->save();
             $response['comment_answered'][] = $comment;

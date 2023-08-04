@@ -9,6 +9,7 @@ use App\Models\Post;
 use App\Models\ProductsGroup;
 use App\Models\Suggestion;
 use App\Models\Review;
+use App\Models\FlashSale;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
@@ -31,17 +32,13 @@ class ProductController extends Controller
         if($request->has("admin")){
             return Product::orderBy("id","desc")->paginate(5);
         }
-        // $result = array();
-        // $root_categories = Category::where("parent_id",0)->get()->toArray();
-        // foreach($root_categories as $item){
-        //     $result[] = array("category_name"=>$item['name'],'products' => DB::table('products')->whereIn('id',DB::table('product_categories')->where('category_id',$item['id'])->pluck("product_id"))->get());
-        // }
-        // return $result;
         return Category::where("parent_id",0)->get()->map(function($cat){
-            $cat["products"] = DB::table('products')->whereIn('id',DB::table('product_categories')->where('category_id',$cat->id)->pluck("product_id"))->where("home_display",1)->orderBy("id","desc")->get();
+            $cat["products"] = DB::table('products')->whereIn('id',DB::table('product_categories')->where('category_id',$cat->id)->pluck("product_id"))->where("home_display",1)->orderBy("id","desc")->get()->map(function($product){
+                $product->reviews = array("average_star"=> (float)Review::where("product_id",$product->id)->avg("star"),"total_reviews"=>Review::where("product_id",$product->id)->count());
+                return $product;
+            });
             return $cat;
         });
-        //return Product::all();
       
     }
 
@@ -70,6 +67,11 @@ class ProductController extends Controller
         return DB::table("product_categories")->join("products","products.id","=","product_categories.product_id")->select("products.*")->where("product_categories.category_id",16)->where("name","like","%{$request->product_name}%")->limit(5)->get();
     }
 
+    public function searchFlashSaledProducts(Request $request)
+    {
+        return Product::where("name","like","%$request->product_name%")->limit(5)->get();
+    }
+
     /**
      * Store a newly created resource in storage.
      */
@@ -84,7 +86,7 @@ class ProductController extends Controller
         $product->image = $request->file("p_image")->store("images/products/$dir");
         $product->specification = $request->input("specification");
         $product->description = $request->input("description");
-        $product->description_images = $request->has("description_images") ? $request->get("description_images") : json_decode(array());
+        $product->description_images = $request->has("description_images") ? $request->get("description_images") : json_encode(array());
         if($request->has("home_display")){
             $product->home_display = 1;
         }
@@ -107,6 +109,13 @@ class ProductController extends Controller
             foreach ($request->file("gallery") as $file) {
                 $file->store("images/products/$dir/gallery");
             }
+        }
+
+        if($request->has("p_inventory")){
+            DB::table("inventory")->insert([
+                "product_id"=>$id,
+                "quantity"=>$request->input("p_inventory")
+            ]);
         }
 
         if($request->has("brands")){
@@ -132,7 +141,7 @@ class ProductController extends Controller
         if ($request->has("how_many_colors")) {
             for ($i = 0; $i < (int)$request->input("how_many_colors"); $i++) {
                 $path = $request->file("product_color_" . $i)->store("images/products/$dir");
-                DB::table('product_colors')->insert([
+                $color_id = DB::table('product_colors')->insertGetId([
                     'product_id' => $id,
                     'color' => $path,
                     'color_name' => $request->input("p_color_image_name_$i")
@@ -142,6 +151,11 @@ class ProductController extends Controller
                 foreach ($request->file("product_color_gallery_" . $i) as $file) {
                     $file->store("images/products/$dir/$name");
                 }
+                DB::table("inventory")->insert([
+                    "product_id"=>$id,
+                    "color_id"=>$color_id,
+                    "quantity"=>$request->input("p_inventory_of_color_$i")
+                ]);
             }
         };
 
@@ -185,6 +199,10 @@ class ProductController extends Controller
             return $item->brand_id;
         });
 
+        if(DB::table("inventory")->where("product_id",$product->id)->whereNull("color_id")->first()){
+            $product['inventory'] = DB::table("inventory")->where("product_id",$product->id)->whereNull("color_id")->value("quantity");
+        }
+
         $product['suggestion'] = DB::table("suggestion")->join("products","products.id","=","suggestion.suggestion_product_id")->select("products.*")->where("suggestion.product_id",$product->id)->get();
 
         $product['posts'] = Post::where("product_id",$product->id)->limit(5)->get();
@@ -194,7 +212,7 @@ class ProductController extends Controller
                 $item->images = Storage::files("images/review/$item->id");
             }
             return $item;
-        });;
+        });
 
         $product['suggestion'] = DB::table("suggestion")->join("products","products.id","=","suggestion.suggestion_product_id")->select("products.*")->where("suggestion.product_id",$product->id)->get();
         $category_controller = new CategoryController();
@@ -223,7 +241,7 @@ class ProductController extends Controller
         }
 
       
-       $colors = DB::table("product_colors")->select(['color','color_name'])->where("product_id",$product->id)->get();
+       $colors = DB::table("product_colors")->select(['id','color','color_name'])->where("product_id",$product->id)->get();
         if($colors->count() !== 0){
             $product_colors = array();
             foreach($colors as $color){
@@ -231,6 +249,7 @@ class ProductController extends Controller
             $arr['color'] = $color;
             $color_dir = explode(".",$color->color)[0];
             $arr['gallery'] = Storage::files($color_dir);
+            $arr['inventory'] = DB::table("inventory")->where("product_id",$product->id)->where("color_id",$color->id)->value("quantity");
             $product_colors[] = $arr;
         }
          $product['colors'] = $product_colors;
@@ -250,7 +269,17 @@ class ProductController extends Controller
             $product['products_in_group'] = $product->products_in_group();
         }
 
-       return $product;
+        $flash_sale = FlashSale::where("product_id",$product->id)->first();
+        if($flash_sale){
+            if($flash_sale->start_time < date('Y-m-d H:i:s') && date('Y-m-d H:i:s') < $flash_sale->end_time){
+                $product['flash_sale'] = true;
+                $product['flash_sale_start_time'] = $flash_sale->start_time;
+                $product['flash_sale_end_time'] = $flash_sale->end_time;
+                $product['discounted_price_backup'] = $product->discounted_price;
+                $product['discounted_price'] = $flash_sale->discounted_price;
+            }
+        }
+        return $product;
     }
 
     /**
@@ -285,6 +314,18 @@ class ProductController extends Controller
         if($request->hasFile("p_image")){
             Storage::delete($product->image);
             $product->image = $request->file("p_image")->store("images/products/$product->dir");
+        }
+
+        if($request->has("p_inventory")){
+            if(DB::table("inventory")->where("product_id",$product->id)->whereNull("color_id")->first()){
+                DB::table("inventory")->where("product_id",$product->id)->whereNull("color_id")->increment("quantity",$request->input("p_inventory"));
+            }else{
+                DB::table("inventory")->insert([
+                    "product_id"=>$product->id,
+                    "quantity"=>$request->input("p_inventory")
+                ]);
+            }
+          
         }
 
         /**
@@ -351,19 +392,19 @@ class ProductController extends Controller
         $colors_remained = array();
         foreach($old_product_colors as $color){
             $isNewColorUploaded = false;
-            $arr = explode("/", explode(".", $color->id_color)[0]);
-            $color_name = end($arr);
-            $colors_remained[] = $color->id_color;
-            if($request->hasFile(str_replace(array("/","."),array("-","--"),$color->id_color))){
+            $arr = explode("/", explode(".", $color->color_path)[0]);
+            $color_file_name = end($arr);
+            $colors_remained[] = $color->color_path;
+            if($request->hasFile("new_color_{$color->color->id}")){
                 $isNewColorUploaded = true;
-                Storage::delete($color->id_color);
-                $file_path = $request->file(str_replace(array("/","."),array("-","--"),$color->id_color))->store('images/products/'.$product->dir);
+                Storage::delete($color->color->color);
+                $file_path = $request->file("new_color_{$color->color->id}")->store('images/products/'.$product->dir);
                 $new_color = $file_path;
                 $arr = explode("/", explode(".", $file_path)[0]);
-                $new_color_name = end($arr);
-                DB::table('product_colors')->where('product_id', $product->id)->where('color',$color->id_color)->update(['color' => $new_color]);
+                $new_color_file_name = end($arr);
+                DB::table('product_colors')->where('id',$color->color->id)->update(['color' => $new_color]);
                 array_filter($colors_remained,function($item) use($color){
-                    return $item !== $color->id_color;
+                    return $item !== $color->color->color;
                 });
                 $colors_remained[] = $new_color;
             }
@@ -374,28 +415,29 @@ class ProductController extends Controller
                     $color_gallery_remained[] = $item->image_path;
                 }
             }
-            $old_color_gallery = Storage::files("images/products/$product->dir/$color_name");
+            $old_color_gallery = Storage::files("images/products/$product->dir/$color_file_name");
             $color_gallery_image_to_remove = array_diff($old_color_gallery,$color_gallery_remained);
        
             foreach($color_gallery_image_to_remove as $item){
                  Storage::delete($item);
             }
  
-            if($request->hasFile("gallery_of_" . str_replace(array("/","."),array("-","--"),$color->id_color))){
-                foreach($request->file("gallery_of_" . str_replace(array("/","."),array("-","--"),$color->id_color)) as $file){
-                    $file->store("images/products/".$product->dir."/".$color_name);
+            if($request->hasFile("gallery_of_color_{$color->color->id}")){
+                foreach($request->file("gallery_of_color_{$color->color->id}") as $file){
+                    $file->store("images/products/".$product->dir."/".$color_file_name);
                 }
             }
             if($isNewColorUploaded){
-                Storage::move("images/products/$product->dir/$color_name", "images/products/$product->dir/$new_color_name");
+                Storage::move("images/products/$product->dir/$color_file_name", "images/products/$product->dir/$new_color_file_name");
             }
       
-            DB::table('product_colors')->where('product_id', $product->id)->where('color',isset($new_color) ? $new_color : $color->id_color)->update(['color_name'=>$request->input("color_name_of_". str_replace(array("/","."),array("-","--"),$color->id_color))]);
-            
+            DB::table('product_colors')->where('id',$color->color->id)->update(['color_name'=>$request->input("color_name_of_{$color->color->id}")]);
+            if($request->has("p_inventory_of_color_{$color->color->id}")){
+                DB::table("inventory")->where("product_id",$product->id)->where("color_id",$color->color->id)->increment("quantity",$request->input("p_inventory_of_color_{$color->color->id}"));
+            }
         }
         $product_colors_from_db = DB::table("product_colors")->where("product_id",$product->id)->pluck("color")->toArray();
         $colors_to_remove = array_diff($product_colors_from_db,$colors_remained);
-         
         foreach($colors_to_remove as $item){
             DB::table('product_colors')->where('product_id', $product->id)->where('color',$item)->delete();
             Storage::delete($item);
@@ -411,7 +453,6 @@ class ProductController extends Controller
                 DB::table("product_categories")->where("product_id",$product->id)->where("category_id",$item)->delete();
                 DB::table("product_category_attribute_values")->where("product_id",$product->id)->where("category_id",$item)->delete();
             } else {
-                //->where("product_id",$product->id)
                 DB::table("product_categories")->insert([
                 "product_id"=>$product->id,
                 "category_id"=>$item
@@ -464,7 +505,7 @@ class ProductController extends Controller
         if ($request->has("how_many_colors")) {
             for ($i = 0; $i < (int)$request->input("how_many_colors"); $i++) {
                 $path = $request->file("product_color_" . $i)->store("images/products/$product->dir");
-                DB::table('product_colors')->insert([
+                $color_id = DB::table('product_colors')->insertGetId([
                     'product_id' => $product->id,
                     'color' => $path,
                     'color_name' => $request->input("p_color_image_name_$i")
@@ -474,6 +515,14 @@ class ProductController extends Controller
                 foreach ($request->file("product_color_gallery_" . $i) as $file) {
                     $file->store("images/products/$product->dir/$name");
                 }
+
+                DB::table("inventory")->where("product_id",$product->id)->whereNull("color_id")->delete();
+
+                DB::table("inventory")->insert([
+                    "product_id"=>$product->id,
+                    "color_id"=>$color_id,
+                    "quantity"=>$request->input("p_inventory_of_color_$i")
+                ]);
             }
         };
 
@@ -515,11 +564,11 @@ class ProductController extends Controller
     public function destroy(Product $product)
     {
         Storage::deleteDirectory("images/products/$product->dir");
-        foreach(json_encode($product->description_images) as $description_image){
+        foreach(json_decode($product->description_images) as $description_image){
             Storage::delete($description_image);
         }
         $product->delete();
-        return "OK";
+        return response()->json(["message"=>"Xóa sản phẩm thành công"],200);
     }
 
     public function filter(Request $request)  
@@ -540,7 +589,15 @@ class ProductController extends Controller
             }
            }
         }
-        return response()->json(['filtered_products'=>DB::table("products")->whereIn("id",$filtered_products)->orderBy("id","desc")->paginate($request->products_per_page)],200);
+        // return response()->json(['filtered_products'=>DB::table("products")->whereIn("id",$filtered_products)->orderBy("id","desc")->paginate($request->products_per_page)],200);
+        return response()->json(['filtered_products'=>tap(DB::table("products")->whereIn("id",$filtered_products)->orderBy("id","desc")->paginate($request->products_per_page),function($paginatedInstance){
+            return $paginatedInstance->getCollection()->transform(function ($product) {
+                $product->reviews = array("average_star"=> (float)Review::where("product_id",$product->id)->avg("star"),"total_reviews"=>Review::where("product_id",$product->id)->count());
+                return $product;
+            });
+        })],200);
+
+
     }
 
     public function searchTrend()
@@ -556,7 +613,7 @@ class ProductController extends Controller
     public function searchKeyWord(Request $request)
     {
         if($request->has("compare")){
-            return DB::table("product_categories")->join("products","products.id","=","product_categories.product_id")->select("products.*")->where("product_categories.category_id",$request->compare_cat)->where("products.name","like","%$request->keyword%")->orderBy("id","desc")->get()->map(function($item){
+            return DB::table("product_categories")->join("products","products.id","=","product_categories.product_id")->select("products.*")->where("product_categories.category_id",$request->compare_cat)->where("products.name","like","%$request->keyword%")->orderBy("id","desc")->limit(5)->get()->map(function($item){
                 $item->specification = json_decode($item->specification);
                 return $item;
             });

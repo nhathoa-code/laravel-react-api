@@ -35,7 +35,8 @@ class OnlinePayment extends Controller
         if ($secureHash == $vnp_SecureHash) {
             if ($_GET['vnp_ResponseCode'] == '00') {
                 $order = Order::find($_GET['vnp_TxnRef']);
-                $order->status = "Đã xác nhận";
+                $order->status = 2;
+                $order->admin_status = 2;
                 $order->repay_link = null;
                 $order->paid_status = "Đã thanh toán | MGD:" . $_GET['vnp_TransactionNo'];
                 $order->save();

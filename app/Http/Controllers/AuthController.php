@@ -7,6 +7,7 @@ use Illuminate\Http\Response;
 use App\Models\User;
 use App\Models\Admin;
 use App\Models\Product;
+use App\Models\FlashSale;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Auth;
 use App\Models\ShoppingCart;
@@ -60,14 +61,26 @@ class AuthController extends Controller
       $user = $request->user();
       $user->profile = DB::table("profiles")->where("user_id",$user->id)->first();
       $shopping_cart = $user->shopping_cart->map(function($item){
+        $product = Product::find($item->product_id);
+        $item->name = $product->name;
+        $item->slug = $product->slug;
+        $item->price = $product->price;
+        $item->discounted_price = $product->discounted_price;
+        $item->color = DB::table("product_colors")->where("id",$item->color_id)->value("color_name");
+        $flash_sale = FlashSale::where("product_id",$product->id)->first();
+        if($flash_sale){
+          if($flash_sale->start_time < date('Y-m-d H:i:s') && date('Y-m-d H:i:s') < $flash_sale->end_time){
+            $item->discounted_price = $flash_sale->discounted_price;
+          }
+        }
         $options = array();
-        $options['colors'] = DB::table("product_colors")->select(['color','color_name'])->where("product_id",$item->product_id)->get();
+        $options['colors'] = DB::table("product_colors")->select(['id','color','color_name'])->where("product_id",$item->product_id)->get();
         $group = DB::table("groups_products_link")->where("product_id",$item->product_id)->first();
         if($group){
           $product = Product::find($item->product_id);
           $product->group_id = $group->group_id;
           $options['versions'] = $product->products_in_group()->map(function($Item){
-            $Item->colors = DB::table("product_colors")->select(['color','color_name'])->where("product_id",$Item->product_id)->get();
+            $Item->colors = DB::table("product_colors")->select(['id','color','color_name'])->where("product_id",$Item->product_id)->get();
             return $Item;
           });
         } 
@@ -76,7 +89,7 @@ class AuthController extends Controller
         }
         return $item;
         });
-        return response()->json(['user'=>$user,'shopping_cart'=>$shopping_cart],200);
+        return response()->json(['user'=>$user,'type'=>$request->user()->tokenable_type,'shopping_cart'=>$shopping_cart],200);
     }
 
 }

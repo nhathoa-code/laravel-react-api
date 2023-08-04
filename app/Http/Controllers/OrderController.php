@@ -6,6 +6,7 @@ use App\Models\Order;
 use App\Models\User;
 use App\Models\Coupon;
 use App\Models\Product;
+use App\Models\FlashSale;
 use App\Models\OrderTracker;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -26,33 +27,29 @@ class OrderController extends Controller
      */
     public function index(Request $request)
     {
-        if($request->has("status") || $request->has("is_changed")){
+        if($request->has("status")){
             $result = array();
             if($request->has("admin")){
                  if($request->has("status")){
-                    if($request->input("status") === "Tất cả"){
+                    if($request->input("status") == 0){
                         $orders = Order::all();
                     }else{
-                        $orders = Order::where("status",$request->query("status"))->where("is_changed",'0')->get();
+                        $orders = Order::where("admin_status",$request->query("status"))->get();
                     }
-                }else if($request->has("is_changed")){
-                    $orders = Order::where("is_changed",'1')->get();
                 }
                 $orders->each(function($item) use(&$result){
                     $result[] = array("order"=>$item,"order_details"=>DB::table("order_details")->select("products.name","order_details.*")->join("products","order_details.product_id","=","products.id")->where("order_id",$item->id)->get());
                 });
             }else{
                 if($request->has("status")){
-                    if($request->input("status") === "Tất cả"){
-                        $orders = Order::all();
+                    if($request->input("status") === "0"){
+                        $orders = Order::where("user_id",$request->user()->id)->orderBy("id","desc")->get();
                     }else{
-                        $orders = Order::where("user_id",$request->user()->id)->where("status",$request->query("status"))->where("is_changed",'0')->get();
+                        $orders = Order::where("user_id",$request->user()->id)->where("status",$request->query("status"))->orderBy("id","desc")->get();
                     }
-                }else if($request->has("is_changed")){
-                    $orders = Order::where("user_id",$request->user()->id)->where("is_changed",'1')->get();
                 }
                 $orders->each(function($item) use(&$result){
-                    $result[] = array("order"=>$item,"order_details"=>DB::table("order_details")->select("products.name","order_details.*")->join("products","order_details.product_id","=","products.id")->where("order_id",$item->id)->get());
+                    $result[] = array("order"=>$item,"order_details"=>DB::table("order_details")->select("products.name","order_details.*","product_colors.color_name as color")->join("products","order_details.product_id","=","products.id")->join("product_colors","order_details.color_id","=","product_colors.id")->where("order_id",$item->id)->get());
                 });
             }
            
@@ -64,7 +61,7 @@ class OrderController extends Controller
 
     public function newOrders()
     {
-        return Order::where("status","Chờ thanh toán")->orWhere("status","Đã xác nhận")->where("pttt","vnpay")->get();
+        return Order::where("status",1)->orWhere("status",2)->where("pttt","vnpay")->get();
     }
 
     /**
@@ -78,7 +75,8 @@ class OrderController extends Controller
         $coupons = array();
         $order->user_id = $request->user()->id;
         $order->buyer_info = $request->input("buyer_info");
-        $order->status = "Chờ thanh toán";
+        $order->status = 1;
+        $order->admin_status = 1;
         $order->paid_status = "Chưa thanh toán";
         $order->shipping_fee = $request->input("shipping_fee");
         $order->pttt = $request->input("pttt");
@@ -86,6 +84,9 @@ class OrderController extends Controller
         if($request->has("coupon")){
             $coupons['coupon'] = $request->input("coupon");
             $coupon = Coupon::find($request->input("coupon")["id"]);
+            if(!$coupon){
+                return response()->json(["message"=>"Mã giảm giá không tồn tại"],400);
+            }
             if($coupon->used >= $coupon->limit_per_coupon){
                 return response()->json(["message"=>"Mã giảm giá không hợp lệ"],400);
             }
@@ -101,6 +102,9 @@ class OrderController extends Controller
         if($request->has("free_ship")){
             $coupons['free_ship'] = $request->input("free_ship");
             $coupon = Coupon::find($request->input("free_ship")["id"]);
+            if(!$coupon){
+                return response()->json(["message"=>"Mã free ship không tồn tại"],400);
+            }
             if($coupon->used >= $coupon->limit_per_coupon){
                 return response()->json(["message"=>"Mã giảm giá không hợp lệ"],400);
             }
@@ -121,18 +125,27 @@ class OrderController extends Controller
         $amount = 0;
         $shopping_cart = DB::table("shopping_cart")->where("user_id",$request->user()->id)->get();
         $shopping_cart->map(function($item) use($order,&$amount,$items_to_purchase){
+            $product = Product::find($item->product_id);
+            $flash_sale = FlashSale::where("product_id",$item->product_id)->first();
+            if($flash_sale){
+                if($flash_sale->start_time < date('Y-m-d H:i:s') && date('Y-m-d H:i:s') < $flash_sale->end_time){
+                    $product->discounted_price = $flash_sale->discounted_price;
+                }
+            }
             if(in_array($item->id,$items_to_purchase)){
-                $amount += $item->quantity * ($item->price - $item->discounted_price);
+                $product = Product::find($item->product_id);
+                $amount += $item->quantity * ($product->price - $product->discounted_price);
                 $image_name = explode("/",$item->image)[count(explode("/",$item->image)) - 1];
                 Storage::move($item->image, "images/orders/$order->id/$image_name");
                 DB::table("order_details")->insert([
                     'order_id'=>$order->id,
                     'product_id'=>$item->product_id,
-                    'price'=>$item->price,
-                    'discounted_price'=>$item->discounted_price,
+                    'price'=>$product->price,
+                    'discounted_price'=>$product->discounted_price,
                     'quantity'=>$item->quantity,
                     'image'=> "images/orders/$order->id/$image_name",
-                    'color'=>$item->color
+                    'color_id'=>$item->color_id,
+                    'version'=>$item->version,
                 ]);
             }
         });
@@ -232,7 +245,7 @@ class OrderController extends Controller
      */
     public function show(Order $order)
     {
-        return response()->json(["order"=>$order,"order_details"=>DB::table("order_details")->select("products.name","order_details.*")->join("products","order_details.product_id","=","products.id")->where("order_id",$order->id)->get(),"order_tracker"=>OrderTracker::where("order_id",$order->id)->get()],200);
+        return response()->json(["order"=>$order,"order_details"=>DB::table("order_details")->select("products.name","order_details.*","product_colors.color_name as color")->join("products","order_details.product_id","=","products.id")->join("product_colors","order_details.color_id","=","product_colors.id")->where("order_id",$order->id)->get(),"order_tracker"=>OrderTracker::where("order_id",$order->id)->get()],200);
     }
 
 
@@ -246,20 +259,24 @@ class OrderController extends Controller
             foreach($order_details as $item){
                 DB::table("order_details")->where("id",$item->id)->update(['quantity'=>$item->quantity,'discounted_price'=>$item->discounted_price]);
             }
-            $order->is_changed = '1';
             $order->save();
             User::find($request->input("user_id"))->notify(new OrderUpdated());
             return response()->json(['message'=>"Ok..."],200);
-        }else if($request->has("status")){
-            $order->status = $request->input("status");
-            switch( $order->status){
-                case "Đã xác nhận":
+        }else if($request->has("status_code")){
+            switch($request->input("status_code")){
+                case "2": 
+                    $order->status = $request->input("status_code");
+                    $order->admin_status = $request->input("status_code");
                     OrderStatusUpdate::dispatch($order->id,"Đơn hàng đã được xác nhận");
                     break;
-                case "Đang giao":
+                case "3":
+                    $order->status = $request->input("status_code");
+                    $order->admin_status = $request->input("status_code"); 
                     OrderStatusUpdate::dispatch($order->id,"Đơn hàng đang được giao đến bạn");    
                     break;
-                case "Hoàn thành":
+                case "4":
+                    $order->status = $request->input("status_code");
+                    $order->admin_status = 5;
                     if($order->pttt === "cod"){
                         $order->paid_status = "Đã thanh toán";
                     }
@@ -268,21 +285,28 @@ class OrderController extends Controller
                         $product = Product::find($item->product_id);
                         $product->sold = $product->sold + $item->quantity;
                         $product->save();
+                        $inventory = DB::table("inventory")->where("product_id",$item->product_id);
+                        if($item->color_id){
+                            $inventory->where("color_id",$item->color_id);
+                        }
+                        $inventory->decrement("quantity",$item->quantity);
                     });
                     break;
-                case "Đã hủy":
+                case "6":
+                    $order->admin_status = $request->input("status_code"); 
+                    break;
+                case "7":
+                    $order->admin_status = 7;
+                    $order->status = 7;
+                    $order->canceled_by = "1";
                     OrderStatusUpdate::dispatch($order->id,"Đơn hàng đã bị hủy");            
             }
             $order->save();
-            return response()->json(['message'=>"Ok...",'status'=>$request->input("status"),'pttt'=>$order->pttt],200);
-        }else if($request->has("order_agree")){
-            $order->is_changed = '0';
-            $order->status = "Chờ thanh toán";
-            $order->save();
-            return response()->json(['message'=>"Ok..."],200);
+            return response()->json(['message'=>"Ok...",'status'=>$order->admin_status,'pttt'=>$order->pttt],200);
         }else if($request->has("order_cancel")){
-            $order->is_changed = '0';
-            $order->status = "Đã hủy";
+            $order->status = 7;
+            $order->admin_status = 7;
+            $order->canceled_by = $request->canceled_by;
             $order->save();
             OrderStatusUpdate::dispatch($order->id,"Đơn hàng đã bị hủy");
             return response()->json(['message'=>"Ok..."],200);
@@ -296,5 +320,13 @@ class OrderController extends Controller
     public function destroy(Order $order)
     {
         //
+    }
+
+    public function countOrders(Request $request)
+    {
+        $status_1 = Order::where("user_id",$request->user()->id)->where("status",1)->count();
+        $status_2 = Order::where("user_id",$request->user()->id)->where("status",2)->count();
+        $status_3 = Order::where("user_id",$request->user()->id)->where("status",3)->count();
+        return array("status_1"=>$status_1,"status_2"=>$status_2,"status_3"=>$status_3);
     }
 }

@@ -31,38 +31,38 @@ class ShoppingCartController extends Controller
     public function store(Request $request)
     {
         $user_id = $request->user()->id;
-        $shopping_cart_item= ShoppingCart::where('user_id', '=', $user_id)->where('product_id','=',$request->input("product_id"))->where('color','=',$request->has("color") ? $request->input("color") : "")->where('version','=',$request->has('version') ? $request->input('version') : "")->first();
+        $shopping_cart_item= ShoppingCart::where('user_id', '=', $user_id)->where('product_id','=',$request->input("product_id"))->where('color_id','=',$request->has("color_id") ? $request->input("color_id") : "")->where('version','=',$request->has('version') ? $request->input('version') : "")->first();
         if ($shopping_cart_item === null) {
+            $product = Product::find($request->input("product_id"));
             $shopping_cart_item = new ShoppingCart();
             $shopping_cart_item->user_id = $user_id;
             $shopping_cart_item->product_id = $request->input("product_id");
-            $shopping_cart_item->name = $request->input("name");
-            $shopping_cart_item->slug = $request->input("slug");
             $str_arr = explode("/",$request->input("image"));
             $file_name = end($str_arr);
-            $shopping_cart_item->price = $request->input("price");
-            $shopping_cart_item->discounted_price = $request->input("discounted_price");
             $shopping_cart_item->image = "images/shopping_cart/$user_id/$file_name";
             Storage::copy($request->input("image"), "images/shopping_cart/$user_id/$file_name");
             $options = array();
-            if($request->has("color")){
-                $shopping_cart_item->color = $request->input("color");
-                $options['colors'] = DB::table("product_colors")->select(['color','color_name'])->where("product_id",$request->input("product_id"))->get();
+            if($request->has("color_id")){
+                $shopping_cart_item->color_id = $request->input("color_id");
+                $color_name = DB::table("product_colors")->where("id",$shopping_cart_item->color_id)->value("color_name");
+                $options['colors'] = DB::table("product_colors")->select(['id','color','color_name'])->where("product_id",$request->input("product_id"))->get();
             }
             if($request->has("version")){
                 $shopping_cart_item->version = $request->input("version");
-                $product = Product::find($request->input("product_id"));
                 $group = DB::table("groups_products_link")->where("product_id",$request->input("product_id"))->first();
                 $product->group_id = $group->group_id;
                 $options['versions'] = $product->products_in_group()->map(function($Item){
-                $Item->colors = DB::table("product_colors")->select(['color','color_name'])->where("product_id",$Item->product_id)->get();
+                $Item->colors = DB::table("product_colors")->select(['id','color','color_name'])->where("product_id",$Item->product_id)->get();
                 return $Item;
             });
              
             }
             $shopping_cart_item->quantity = 1;
             $shopping_cart_item->save();
-            $res = array("cart_item"=>$shopping_cart_item,"new"=>true);
+            if(isset($shopping_cart_item->color_id)){
+                $shopping_cart_item->color = $color_name;
+            } 
+            $res = array("cart_item"=>$shopping_cart_item,"product"=>$product,"new"=>true);
             if(!empty($options)){
                 $res["options"] = $options;
             }
@@ -88,22 +88,22 @@ class ShoppingCartController extends Controller
     public function update(Request $request, ShoppingCart $shoppingCart)
     {
         if($request->has("update")){
+            Storage::delete($shoppingCart->image);
+            $str_arr = explode("/",$request->input("image"));
+            $file_name = end($str_arr);
+            $shoppingCart->image = "images/shopping_cart/{$request->user()->id}/$file_name";
+            Storage::copy($request->input("image"), "images/shopping_cart/{$request->user()->id}/$file_name");
+           
             if($request->has("version")){
-                $shoppingCart->color = $request->input("color");
-                $shoppingCart->image = $request->input("image");
+                $shoppingCart->color_id = $request->input("color_id");
                 $shoppingCart->version = $request->input("version");
                 $shoppingCart->product_id = $request->input("product_id");
-                $shoppingCart->name = $request->input("name");
-                $shoppingCart->slug = $request->input("slug");
-                $shoppingCart->price = $request->input("price");
-                $shoppingCart->discounted_price = $request->input("discounted_price");
                 if($request->has("quantity")){
                     $shoppingCart->quantity = $request->input("quantity");
                 }
                 $shoppingCart->save();
             }else{
-                $shoppingCart->color = $request->input("color");
-                $shoppingCart->image = $request->input("image");
+                $shoppingCart->color_id = $request->input("color_id");
                 $shoppingCart->save();
             }
           

@@ -26,6 +26,7 @@ use App\Http\Controllers\AdminController;
 use App\Http\Controllers\PostCategoryController;
 use App\Http\Controllers\PostController;
 use App\Http\Controllers\CouponController;
+use App\Http\Controllers\FlashSaleController;
 use App\Http\Controllers\StatisticsController;
 use App\Models\Category;
 /*
@@ -66,6 +67,7 @@ Route::resource('category_attribute_values', CategoryAttributeValueController::c
 
 Route::post("upload", [ProductController::class, 'upload']);
 
+Route::get("orders/count",[OrderController::class,"countOrders"]);
 Route::get("new_orders",[OrderController::class,"newOrders"]);
 Route::resource('orders', OrderController::class);
 
@@ -80,6 +82,7 @@ Route::get("products/slug/{product:slug}",[ProductController::class,'slug']);
 Route::get("products/filter/categories",[ProductController::class,'filterByCategories']);
 Route::get("products/filter/name",[ProductController::class,'filterByName']);
 Route::get("products/find/suggestion_products",[ProductController::class,'findSuggestionProducts']);
+Route::get("products/search_flash_saled_products",[ProductController::class,'searchFlashSaledProducts']);
 Route::get("products/search_trend",[ProductController::class,'searchTrend']);
 Route::get("products/most_view",[ProductController::class,'mostView']);
 Route::get("products/search_keyword",[ProductController::class,'searchKeyWord']);
@@ -98,6 +101,8 @@ Route::get("check_vnpay",[OnlinePayment::class,'vnpay']);
 Route::resource('notifications',NotificationController::class);
 
 Route::resource('coupons',CouponController::class);
+
+Route::resource('flash_sales',FlashSaleController::class);
 
 Route::resource('reviews',ReviewController::class);
 

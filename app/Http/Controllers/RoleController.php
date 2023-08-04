@@ -26,7 +26,7 @@ class RoleController extends Controller
      */
     public function store(Request $request)
     {
-        if (!Gate::forUser(Auth::guard('admin')->user())->allows('admin-action')) {
+        if (!Gate::forUser($request->user())->allows('admin-action')) {
             return response()->json(["message"=>"Bạn không phải là administrator, bạn không có quyền này ?"],403);
         }
         
@@ -49,7 +49,7 @@ class RoleController extends Controller
      */
     public function update(Request $request, Role $role)
     {
-        if (!Gate::forUser(Auth::guard('admin')->user())->allows('admin-action')) {
+        if (!Gate::forUser($request->user())->allows('admin-action')) {
             return response()->json(["message"=>"Bạn không phải là administrator, bạn không có quyền này ?"],403);
         }
         $role->name = $request->role_name;
@@ -61,9 +61,9 @@ class RoleController extends Controller
     /**
      * Remove the specified resource from storage.
      */
-    public function destroy(Role $role)
+    public function destroy(Request $request,Role $role)
     {
-        if (!Gate::forUser(Auth::guard('admin')->user())->allows('admin-action')) {
+        if (!Gate::forUser($request->user())->allows('admin-action')) {
             return response()->json(["message"=>"Bạn không phải là administrator, bạn không có quyền này ?"],403);
         }
         $role->delete();

@@ -19,14 +19,14 @@ return new class extends Migration
             $table->json('buyer_info');
             $table->text('note')->nullable();
             $table->string('pttt',100);
-            $table->string('status',100);
+            $table->tinyInteger('status');
             $table->string('paid_status',100);
             $table->bigInteger("shipping_fee")->unsigned();
             $table->json("coupons")->nullable();
             $table->bigInteger("subtotal")->unsigned();
             $table->bigInteger("amount_pay")->unsigned();
-            $table->tinyInteger('is_changed',1)->unsigned()->default(0);
             $table->text("repay_link")->nullable();
+            $table->enum('canceled_by', [0, 1])->nullable();
         });
     }
 

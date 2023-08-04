@@ -22,8 +22,9 @@ return new class extends Migration
             $table->bigInteger("discounted_price");
             $table->integer("quantity");
             $table->text("image");
-            $table->text("color")->default("");
-            $table->text("version")->default("");
+            $table->unsignedBigInteger('color_id');
+            $table->foreign("color_id")->references("id")->on("product_colors")->onDelete('cascade')->onUpdate('cascade');
+            $table->string("version",50)->default("");
         });
     }
 

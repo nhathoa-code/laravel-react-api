@@ -112,7 +112,7 @@ class AdminController extends Controller
     /**
      * Remove the specified resource from storage.
      */
-    public function destroy(Admin $admin)
+    public function destroy(Request $request,Admin $admin)
     {
         if (!Gate::forUser($request->user())->allows('admin-action')) {
             return response()->json(["message"=>"Bạn không phải là administrator, bạn không có quyền này ?"],403);

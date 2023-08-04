@@ -21,7 +21,9 @@ return new class extends Migration
             $table->bigInteger("discounted_price")->unsigned();
             $table->integer("quantity");
             $table->text("image");
-            $table->string("color",50);
+            $table->unsignedBigInteger('color_id');
+            $table->foreign("color_id")->references("id")->on("product_colors")->onDelete('cascade')->onUpdate('cascade');
+            $table->string("version",50);
             $table->timestamp('created_at');
         });
     }

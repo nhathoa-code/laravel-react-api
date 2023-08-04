@@ -6,6 +6,7 @@ use App\Models\Post;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Gate;
 
 class PostController extends Controller
 {
@@ -18,7 +19,7 @@ class PostController extends Controller
      */
     public function index()
     {
-        return Post::with('post_category')->with('author')->paginate(5);
+        return Post::with('post_category')->with('author')->latest()->paginate(5);
     }
 
     public function posts_category($category_id)
@@ -39,19 +40,21 @@ class PostController extends Controller
      */
     public function store(Request $request)
     {
+        if (!Gate::forUser($request->user())->allows('author-action')) {
+            return response()->json(["message"=>"Bạn không phải là author, bạn không có quyền này ?"],403);
+        }
         Post::create([
             "title"=>$request->post_title,
             "slug"=>$request->post_slug,
             "description"=>$request->post_description,
             "content"=>$request->post_content,
-            "author_id"=>Auth::guard('admin')->user()->id,
+            "author_id"=>$request->user()->id,
             "product_id"=>$request->product_id,
             "post_category_id"=>$request->post_category,
             "post_thumbnail"=>$request->file("thumbnail")->store("images/post_thumbnails"),
-            "images"=> $request->has("post_images") ? $request->get("post_images") : json_decode(array())
+            "images"=> $request->has("post_images") ? $request->get("post_images") : json_encode(array())
         ]); 
-        $request->session()->forget("post_images");
-        return response()->json(["message"=>"New post created successfully"]);
+        return response()->json(["message"=>"Thêm bài viết thành công"]);
     }
 
     /**
@@ -68,7 +71,13 @@ class PostController extends Controller
      * Update the specified resource in storage.
      */
     public function update(Request $request, Post $post)
-    {
+    { 
+        if (!Gate::forUser($request->user())->allows('author-action')) {
+            return response()->json(["message"=>"Bạn không phải là author, bạn không có quyền này ?"],403);
+        }
+        if (!Gate::forUser($request->user())->allows('update-post',$post)) {
+            return response()->json(["message"=>"Bạn không phải là tác giả của bài viết này ?"],403);
+        }
         $new_images = array();
         preg_match_all('|<figure class="image">(.*)</figure>|U',$request->post_content,$matches);
         foreach($matches[1] as $item){
@@ -94,16 +103,21 @@ class PostController extends Controller
         $post->content = $request->post_content;
         $post->images = json_encode($new_images);
         $post->save();
-        $request->session()->forget("post_images");
         return response()->json(["message"=>"Sửa bài viết thành công"],200);
     }
 
     /**
      * Remove the specified resource from storage.
      */
-    public function destroy(Post $post)
+    public function destroy(Request $request,Post $post)
     {
-        foreach(json_encode($post->images) as $post_image){
+        if (!Gate::forUser($request->user())->allows('author-action')) {
+            return response()->json(["message"=>"Bạn không phải là author, bạn không có quyền này ?"],403);
+        }
+        if (!Gate::forUser($request->user())->allows('delete-post',$post)) {
+            return response()->json(["message"=>"Bạn không phải là tác giả của bài viết này ?"],403);
+        }
+        foreach(json_decode($post->images) as $post_image){
             Storage::delete($post_image);
         }
         $post->delete();

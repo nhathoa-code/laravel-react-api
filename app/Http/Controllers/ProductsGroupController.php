@@ -17,7 +17,6 @@ class ProductsGroupController extends Controller
      */
     public function index()
     {
-        // $products_groups = DB::table("products_groups")->leftJoin("categories","categories.id","=","products_groups.category_id")->leftJoin("brands","brands.id","=","products_groups.brand_id")->get(['products_groups.*','categories.name as category_name','brands.image as brand_image']);
         $products_groups = DB::table("products_groups")->leftJoin("categories","categories.id","=","products_groups.category_id")->leftJoin("brands","brands.id","=","products_groups.brand_id")->select('products_groups.*','categories.name as category_name','brands.image as brand_image')->paginate(5);
         return response()->json(["products_groups" => $products_groups]);
     }
