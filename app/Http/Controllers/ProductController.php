@@ -17,6 +17,7 @@ use Illuminate\Support\Str;
 use App\Http\Controllers\CategoryController;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Gate;
 
 class ProductController extends Controller
 {
@@ -77,6 +78,9 @@ class ProductController extends Controller
      */
     public function store(Request $request)
     {   
+        if (!Gate::forUser($request->user())->allows('manager-action')) {
+            return response()->json(["message"=>"Bạn không phải là manager, bạn không có quyền này ?"],403);
+        }
         $dir = time();
         $product = new Product();
         $product->name = $request->input("p_name");
@@ -297,6 +301,9 @@ class ProductController extends Controller
      */
     public function update(Request $request, Product $product)
     {
+        if (!Gate::forUser($request->user())->allows('manager-action')) {
+            return response()->json(["message"=>"Bạn không phải là manager, bạn không có quyền này ?"],403);
+        }
         /**
          * update product data
          */
@@ -561,8 +568,11 @@ class ProductController extends Controller
     /**
      * Remove the specified resource from storage.
      */
-    public function destroy(Product $product)
+    public function destroy(Request $request,Product $product)
     {
+        if (!Gate::forUser($request->user())->allows('manager-action')) {
+            return response()->json(["message"=>"Bạn không phải là manager, bạn không có quyền này ?"],403);
+        }
         Storage::deleteDirectory("images/products/$product->dir");
         foreach(json_decode($product->description_images) as $description_image){
             Storage::delete($description_image);

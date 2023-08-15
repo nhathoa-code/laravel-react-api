@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\Coupon;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Gate;
 
 class CouponController extends Controller
 {
@@ -28,7 +29,9 @@ class CouponController extends Controller
      */
     public function store(Request $request)
     {
-        // return $request->all();
+        if (!Gate::forUser($request->user())->allows('manager-action')) {
+            return response()->json(["message"=>"Bạn không phải là manager, bạn không có quyền này ?"],403);
+        }
         $coupon = new Coupon();
         $coupon->code = $request->code;
         $coupon->description = $request->description;
@@ -69,6 +72,9 @@ class CouponController extends Controller
      */
     public function update(Request $request, Coupon $coupon)
     {
+        if (!Gate::forUser($request->user())->allows('manager-action')) {
+            return response()->json(["message"=>"Bạn không phải là manager, bạn không có quyền này ?"],403);
+        }
         $coupon->code = $request->code;
         $coupon->description = $request->description;
         $coupon->start = $request->start;
@@ -98,8 +104,11 @@ class CouponController extends Controller
     /**
      * Remove the specified resource from storage.
      */
-    public function destroy(Coupon $coupon)
+    public function destroy(Request $request,Coupon $coupon)
     {
+        if (!Gate::forUser($request->user())->allows('manager-action')) {
+            return response()->json(["message"=>"Bạn không phải là manager, bạn không có quyền này ?"],403);
+        }
         $coupon->delete();
         return response()->json(["message"=>"Đã xóa mã khuyến mãi"],200);
     }

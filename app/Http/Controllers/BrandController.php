@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Brand;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Gate;
 
 class BrandController extends Controller
 {
@@ -25,6 +26,9 @@ class BrandController extends Controller
      */
     public function store(Request $request)
     {
+        if (!Gate::forUser($request->user())->allows('manager-action')) {
+            return response()->json(["message"=>"Bạn không phải là manager, bạn không có quyền này ?"],403);
+        }
         $brand = new Brand();
         $brand->category_id = $request->category_id;
         $brand->name = $request->brand_name;
@@ -49,6 +53,9 @@ class BrandController extends Controller
      */
     public function update(Request $request, Brand $brand)
     {
+        if (!Gate::forUser($request->user())->allows('manager-action')) {
+            return response()->json(["message"=>"Bạn không phải là manager, bạn không có quyền này ?"],403);
+        }
         $brand->name = $request->brand_name;
         if($request->has("brand_image")){
             Storage::delete($brand->image);
@@ -62,8 +69,11 @@ class BrandController extends Controller
     /**
      * Remove the specified resource from storage.
      */
-    public function destroy(Brand $brand)
+    public function destroy(Request $request,Brand $brand)
     {
+        if (!Gate::forUser($request->user())->allows('manager-action')) {
+            return response()->json(["message"=>"Bạn không phải là manager, bạn không có quyền này ?"],403);
+        }
         Storage::delete($brand->image);
         $brand->delete();
         return response()->json(['message'=>"Deleted sucessfully"]);

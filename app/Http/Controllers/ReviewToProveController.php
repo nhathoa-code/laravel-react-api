@@ -8,12 +8,13 @@ use App\Models\Review;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Gate;
 
 class ReviewToProveController extends Controller
 {
     public function __construct()
     {
-        $this->middleware('auth:sanctum')->only('store');
+        $this->middleware('auth:sanctum')->only(['store','destroy']);
     }
     /**
      * Display a listing of the resource.
@@ -37,8 +38,9 @@ class ReviewToProveController extends Controller
 
     public function reviewProve(ReviewProve $review_to_prove)
     {   
-        
-       
+        if (!Gate::forUser($request->user())->allows('manager-action')) {
+            return response()->json(["message"=>"Bạn không phải là manager, bạn không có quyền này ?"],403);
+        }
         $review = new Review();
         $review->user_id = $review_to_prove->user_id;
         $review->product_id = $review_to_prove->product_id;
@@ -124,8 +126,11 @@ class ReviewToProveController extends Controller
     /**
      * Remove the specified resource from storage.
      */
-    public function destroy(ReviewProve $reviews_to_prove)
+    public function destroy(Request $request,ReviewProve $reviews_to_prove)
     {
+        if (!Gate::forUser($request->user())->allows('manager-action')) {
+            return response()->json(["message"=>"Bạn không phải là manager, bạn không có quyền này ?"],403);
+        }
         if (Storage::exists("images/review_to_prove/$reviews_to_prove->id")){
                 Storage::deleteDirectory("images/review_to_prove/$reviews_to_prove->id");
         } 

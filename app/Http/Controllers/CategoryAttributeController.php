@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Models\CategoryAttribute;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Gate;
 
 class CategoryAttributeController extends Controller
 {
@@ -25,6 +26,9 @@ class CategoryAttributeController extends Controller
      */
     public function store(Request $request)
     {
+        if (!Gate::forUser($request->user())->allows('manager-action')) {
+            return response()->json(["message"=>"Bạn không phải là manager, bạn không có quyền này ?"],403);
+        }
         //return var_dump($request->input("show/hide") ? '1' : '0');
         return CategoryAttribute::create([
             "name" => $request->input("name"),
@@ -45,6 +49,9 @@ class CategoryAttributeController extends Controller
      */
     public function update(Request $request, CategoryAttribute $categoryAttribute)
     {
+        if (!Gate::forUser($request->user())->allows('manager-action')) {
+            return response()->json(["message"=>"Bạn không phải là manager, bạn không có quyền này ?"],403);
+        }
         $categoryAttribute->name = $request->input("name");
         $categoryAttribute->{"show/hide"} = $request->input("show/hide") ? '1' : '0';
         $categoryAttribute->save();
@@ -54,8 +61,11 @@ class CategoryAttributeController extends Controller
     /**
      * Remove the specified resource from storage.
      */
-    public function destroy(CategoryAttribute $categoryAttribute)
+    public function destroy(Request $request,CategoryAttribute $categoryAttribute)
     {
+        if (!Gate::forUser($request->user())->allows('manager-action')) {
+            return response()->json(["message"=>"Bạn không phải là manager, bạn không có quyền này ?"],403);
+        }
         $categoryAttribute->delete();
         return response()->json(['message' => "OK"], 200);
     }

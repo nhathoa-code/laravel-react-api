@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\ProductsGroup;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Gate;
 
 class ProductsGroupController extends Controller
 {
@@ -26,6 +27,9 @@ class ProductsGroupController extends Controller
      */
     public function store(Request $request)
     {
+        if (!Gate::forUser($request->user())->allows('manager-action')) {
+            return response()->json(["message"=>"Bạn không phải là manager, bạn không có quyền này ?"],403);
+        }
         try {
             return ProductsGroup::create([
                 'name' => $request->name,
@@ -50,6 +54,9 @@ class ProductsGroupController extends Controller
      */
     public function update(Request $request, ProductsGroup $productsGroup)
     {
+        if (!Gate::forUser($request->user())->allows('manager-action')) {
+            return response()->json(["message"=>"Bạn không phải là manager, bạn không có quyền này ?"],403);
+        }
         $productsGroup->name = $request->name;
         $productsGroup->category_id = $request->category;
         $productsGroup->brand_id = $request->has("brand") ? $request->brand : null;
@@ -62,6 +69,9 @@ class ProductsGroupController extends Controller
      */
     public function destroy(ProductsGroup $productsGroup)
     {
+        if (!Gate::forUser($request->user())->allows('manager-action')) {
+            return response()->json(["message"=>"Bạn không phải là manager, bạn không có quyền này ?"],403);
+        }
         $productsGroup->delete();
         return response()->json(['message' => "OK"], 200);
     }

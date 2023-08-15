@@ -6,9 +6,14 @@ use App\Models\FlashSale;
 use App\Models\Review;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Gate;
 
 class FlashSaleController extends Controller
 {
+    public function __construct()
+    {
+        $this->middleware('auth:sanctum')->only('store');
+    }
     /**
      * Display a listing of the resource.
      */
@@ -25,6 +30,9 @@ class FlashSaleController extends Controller
      */
     public function store(Request $request)
     {
+        if (!Gate::forUser($request->user())->allows('manager-action')) {
+            return response()->json(["message"=>"Bạn không phải là manager, bạn không có quyền này ?"],403);
+        }
         $product_ids_from_db = FlashSale::all()->pluck("product_id")->toArray();
         $flash_saled_product_ids = json_decode($request->product_ids);
         $fullDiff_product_ids = array_merge(array_diff($flash_saled_product_ids, $product_ids_from_db), array_diff($product_ids_from_db, $flash_saled_product_ids));

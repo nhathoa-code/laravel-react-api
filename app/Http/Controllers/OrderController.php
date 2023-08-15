@@ -15,6 +15,7 @@ use App\Notifications\OrderUpdated;
 use App\Events\OrderPlaced;
 use App\Events\OrderStatusUpdate;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Gate;
 
 class OrderController extends Controller
 {
@@ -49,7 +50,7 @@ class OrderController extends Controller
                     }
                 }
                 $orders->each(function($item) use(&$result){
-                    $result[] = array("order"=>$item,"order_details"=>DB::table("order_details")->select("products.name","order_details.*","product_colors.color_name as color")->join("products","order_details.product_id","=","products.id")->join("product_colors","order_details.color_id","=","product_colors.id")->where("order_id",$item->id)->get());
+                    $result[] = array("order"=>$item,"order_details"=>DB::table("order_details")->select("products.name","order_details.*","product_colors.color_name as color")->join("products","order_details.product_id","=","products.id")->leftJoin("product_colors","order_details.color_id","=","product_colors.id")->where("order_id",$item->id)->get());
                 });
             }
            
@@ -70,6 +71,23 @@ class OrderController extends Controller
     public function store(Request $request)
     {
         $items_to_purchase = $request->input("items_to_purchase");
+        foreach($items_to_purchase as $item){
+            $cart_item = ShoppingCart::find($item);
+            $builder = DB::table("inventory")->where("product_id",$cart_item->product_id);
+            if($cart_item->color_id){
+                $builder->where("color_id",$cart_item->color_id);
+            }
+            $inventory = $builder->first();
+            if($inventory->quantity < $cart_item->quantity){
+                $product = Product::find($cart_item->product_id);
+                if($cart_item->color_id){
+                    $color = DB::table("product_colors")->find($cart_item->color_id);
+                }
+                $product_name = $product->name . (isset($color) ? " - {$color->color_name}" : "");
+                return response()->json(["message"=> $inventory->quantity <= 0 ? "Sản phẩm \"{$product_name}\" đã hết hàng" : "Sản phẩm \"{$product_name}\" chỉ còn {$inventory->quantity} sản phẩm tồn kho" ],403);
+            }
+            
+        }
         $address = json_decode($request->input("buyer_info"));
         $order = new Order();
         $coupons = array();
@@ -147,6 +165,12 @@ class OrderController extends Controller
                     'color_id'=>$item->color_id,
                     'version'=>$item->version,
                 ]);
+
+                $inventory = DB::table("inventory")->where("product_id",$item->product_id);
+                if($item->color_id){
+                    $inventory->where("color_id",$item->color_id);
+                }
+                $inventory->decrement("quantity",$item->quantity);
             }
         });
         foreach($items_to_purchase as $item_id){
@@ -245,7 +269,7 @@ class OrderController extends Controller
      */
     public function show(Order $order)
     {
-        return response()->json(["order"=>$order,"order_details"=>DB::table("order_details")->select("products.name","order_details.*","product_colors.color_name as color")->join("products","order_details.product_id","=","products.id")->join("product_colors","order_details.color_id","=","product_colors.id")->where("order_id",$order->id)->get(),"order_tracker"=>OrderTracker::where("order_id",$order->id)->get()],200);
+        return response()->json(["order"=>$order,"order_details"=>DB::table("order_details")->select("products.name","order_details.*","product_colors.color_name as color")->join("products","order_details.product_id","=","products.id")->leftJoin("product_colors","order_details.color_id","=","product_colors.id")->where("order_id",$order->id)->get(),"order_tracker"=>OrderTracker::where("order_id",$order->id)->get()],200);
     }
 
 
@@ -263,6 +287,9 @@ class OrderController extends Controller
             User::find($request->input("user_id"))->notify(new OrderUpdated());
             return response()->json(['message'=>"Ok..."],200);
         }else if($request->has("status_code")){
+            if (!Gate::forUser($request->user())->allows('manager-action')) {
+                return response()->json(["message"=>"Bạn không phải là manager, bạn không có quyền này ?"],403);
+            }
             switch($request->input("status_code")){
                 case "2": 
                     $order->status = $request->input("status_code");
@@ -285,11 +312,6 @@ class OrderController extends Controller
                         $product = Product::find($item->product_id);
                         $product->sold = $product->sold + $item->quantity;
                         $product->save();
-                        $inventory = DB::table("inventory")->where("product_id",$item->product_id);
-                        if($item->color_id){
-                            $inventory->where("color_id",$item->color_id);
-                        }
-                        $inventory->decrement("quantity",$item->quantity);
                     });
                     break;
                 case "6":
@@ -299,6 +321,14 @@ class OrderController extends Controller
                     $order->admin_status = 7;
                     $order->status = 7;
                     $order->canceled_by = "1";
+                    $order_details = DB::table("order_details")->where("order_id",$order->id)->get();
+                    foreach($order_details as $order_detail){
+                        $inventory = DB::table("inventory")->where("product_id",$order_detail->product_id);
+                        if($order_detail->color_id){
+                            $inventory->where("color_id",$order_detail->color_id);
+                        }
+                        $inventory->increment("quantity",$order_detail->quantity);
+                    }
                     OrderStatusUpdate::dispatch($order->id,"Đơn hàng đã bị hủy");            
             }
             $order->save();
@@ -307,6 +337,14 @@ class OrderController extends Controller
             $order->status = 7;
             $order->admin_status = 7;
             $order->canceled_by = $request->canceled_by;
+            $order_details = DB::table("order_details")->where("order_id",$order->id)->get();
+                foreach($order_details as $order_detail){
+                    $inventory = DB::table("inventory")->where("product_id",$order_detail->product_id);
+                    if($order_detail->color_id){
+                        $inventory->where("color_id",$order_detail->color_id);
+                    }
+                $inventory->increment("quantity",$order_detail->quantity);
+            }
             $order->save();
             OrderStatusUpdate::dispatch($order->id,"Đơn hàng đã bị hủy");
             return response()->json(['message'=>"Ok..."],200);

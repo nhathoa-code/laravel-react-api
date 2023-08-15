@@ -12,6 +12,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Gate;
 
 class CategoryController extends Controller
 {
@@ -105,6 +106,9 @@ class CategoryController extends Controller
      */
     public function store(Request $request)
     {
+        if (!Gate::forUser($request->user())->allows('manager-action')) {
+            return response()->json(["message"=>"Bạn không phải là manager, bạn không có quyền này ?"],403);
+        }
         try {
             return Category::create([
                 'name' => $request->input("name"),
@@ -131,6 +135,9 @@ class CategoryController extends Controller
      */
     public function update(Request $request, Category $category)
     {
+        if (!Gate::forUser($request->user())->allows('manager-action')) {
+            return response()->json(["message"=>"Bạn không phải là manager, bạn không có quyền này ?"],403);
+        }
         $category->name = $request->input("name");
         $category->icon = $request->input("icon") ? $request->input("icon") : null;
         if($request->has("category_image")){
@@ -147,8 +154,11 @@ class CategoryController extends Controller
     /**
      * Remove the specified resource from storage.
      */
-    public function destroy(Category $category)
+    public function destroy(Request $request,Category $category)
     {
+        if (!Gate::forUser($request->user())->allows('manager-action')) {
+            return response()->json(["message"=>"Bạn không phải là manager, bạn không có quyền này ?"],403);
+        }
         if($category->image){
             Storage::delete($category->image);
         }

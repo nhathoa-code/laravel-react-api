@@ -7,9 +7,14 @@ use App\Models\Comment;
 use App\Models\Product;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Gate;
 
 class CommentToReplyController extends Controller
 {
+    public function __construct()
+    {
+        $this->middleware('auth:sanctum')->only(['destroy','store']);
+    }
     /**
      * Display a listing of the resource.
      */
@@ -145,6 +150,9 @@ class CommentToReplyController extends Controller
      */
     public function destroy(Request $request,CommentReply $comments_to_reply)
     {
+        if (!Gate::forUser($request->user())->allows('manager-action')) {
+            return response()->json(["message"=>"Bạn không phải là manager, bạn không có quyền này ?"],403);
+        }
         if($request->root_comment_id){
             $Comments_To_Reply = CommentReply::where("reply_to",$request->root_comment_id)->get()->filter(function($item){
                 return $item->comment_id === null;

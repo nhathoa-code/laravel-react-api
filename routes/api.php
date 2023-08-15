@@ -11,6 +11,7 @@ use App\Http\Controllers\ProductsGroupController;
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\ShoppingCartController;
 use App\Http\Controllers\OrderController;
+use App\Http\Controllers\CustomerController;
 use App\Http\Controllers\AddressController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\OnlinePayment;
@@ -28,7 +29,6 @@ use App\Http\Controllers\PostController;
 use App\Http\Controllers\CouponController;
 use App\Http\Controllers\FlashSaleController;
 use App\Http\Controllers\StatisticsController;
-use App\Models\Category;
 /*
 |--------------------------------------------------------------------------
 | API Routes
@@ -70,6 +70,9 @@ Route::post("upload", [ProductController::class, 'upload']);
 Route::get("orders/count",[OrderController::class,"countOrders"]);
 Route::get("new_orders",[OrderController::class,"newOrders"]);
 Route::resource('orders', OrderController::class);
+
+Route::get("customers",[CustomerController::class,"index"]);
+Route::get("customers/{customer}",[CustomerController::class,"customer"]);
 
 Route::post("register", [AuthController::class, 'register']);
 Route::post("login", [AuthController::class, 'login']);
