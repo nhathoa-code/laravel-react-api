@@ -69,7 +69,7 @@ class AdminController extends Controller
             $admin->name = $request->name;
             $admin->username = $request->username;
             if($request->password){
-                $admin->password = $request->password;
+                $admin->password = Hash::make($request->password);
             }
             if($request->has("picture")){
                 if($admin->picture){
@@ -92,6 +92,9 @@ class AdminController extends Controller
             }
             return response()->json(["message"=>"Cập nhật tài khoản quản trị thành công.","edited_admin"=>$admin]);
         }else{
+            if($request->user()->is_guest){
+                return response()->json(["message"=>"Bạn không phải là administrator,Bạn không có quyền này."],403); 
+            }
             if($request->user()->id === $admin->id){
                 $admin->password = Hash::make($request->password);
                 if($request->has("picture")){
@@ -148,7 +151,5 @@ class AdminController extends Controller
 
         return response()->json(["message"=>"logged out"],200);
     }
-
-
 
 }

@@ -31,7 +31,7 @@ class ShoppingCartController extends Controller
     public function store(Request $request)
     {
         $user_id = $request->user()->id;
-        $shopping_cart_item= ShoppingCart::where('user_id', '=', $user_id)->where('product_id','=',$request->input("product_id"))->where('color_id','=',$request->has("color_id") ? $request->input("color_id") : "")->where('version','=',$request->has('version') ? $request->input('version') : "")->first();
+        $shopping_cart_item= ShoppingCart::where('user_id', '=', $user_id)->where('product_id','=',$request->input("product_id"))->where('color_id','=',$request->has("color_id") ? $request->input("color_id") : null)->where('version','=',$request->has('version') ? $request->input('version') : null)->first();
         if ($shopping_cart_item === null) {
             $product = Product::find($request->input("product_id"));
             $shopping_cart_item = new ShoppingCart();
@@ -139,7 +139,6 @@ class ShoppingCartController extends Controller
     {
         $items_to_delete = $request->input("items_to_delete");
         foreach($items_to_delete as $item_id){
-            // ShoppingCart::where("user_id",$request->user()->id)->where("id",$item_id)->delete();
             $cart_item = ShoppingCart::where("user_id",$request->user()->id)->where("id",$item_id)->first();
             Storage::delete($cart_item->image);
             $cart_item->delete();

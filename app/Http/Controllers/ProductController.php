@@ -36,6 +36,13 @@ class ProductController extends Controller
         return Category::where("parent_id",0)->get()->map(function($cat){
             $cat["products"] = DB::table('products')->whereIn('id',DB::table('product_categories')->where('category_id',$cat->id)->pluck("product_id"))->where("home_display",1)->orderBy("id","desc")->get()->map(function($product){
                 $product->reviews = array("average_star"=> (float)Review::where("product_id",$product->id)->avg("star"),"total_reviews"=>Review::where("product_id",$product->id)->count());
+                $flash_sale = FlashSale::where("product_id",$product->id)->first();
+                if($flash_sale){
+                    if($flash_sale->start_time < date('Y-m-d H:i:s') && date('Y-m-d H:i:s') < $flash_sale->end_time){
+                        $product->flash_sale = true;
+                        $product->flash_sale_discounted_price = $flash_sale->discounted_price;
+                    }
+                }
                 return $product;
             });
             return $cat;
@@ -279,8 +286,7 @@ class ProductController extends Controller
                 $product['flash_sale'] = true;
                 $product['flash_sale_start_time'] = $flash_sale->start_time;
                 $product['flash_sale_end_time'] = $flash_sale->end_time;
-                $product['discounted_price_backup'] = $product->discounted_price;
-                $product['discounted_price'] = $flash_sale->discounted_price;
+                $product['flash_sale_discounted_price'] = $flash_sale->discounted_price;
             }
         }
         return $product;
@@ -584,25 +590,51 @@ class ProductController extends Controller
     public function filter(Request $request)  
     {
         $checked_values = json_decode($request->input('input'));
-        $filtered_products = json_decode($request->input("productIds"));
+        $products_ids = json_decode($request->input("productIds"));
         if(count($request->choosen_brands) > 0){
-            $filtered_products = DB::table("products_brands")->whereIn("brand_id",$request->choosen_brands)->get()->pluck('product_id')->toArray();
+            $products_ids = DB::table("products_brands")->whereIn("brand_id",$request->choosen_brands)->get()->pluck('product_id')->toArray();
         }
         foreach($checked_values as $item){
            if(!empty($item->values)){
-              foreach($filtered_products as $id){
+              foreach($products_ids as $id){
                 if(count(DB::table("product_category_attribute_values")->where("product_id",$id)->whereIn("category_attribute_value_id",$item->values)->get()->toArray()) === 0){
-                    $filtered_products = array_filter($filtered_products,function($item) use($id){
+                    $products_ids = array_filter($products_ids,function($item) use($id){
                         return $item !== $id;
                     });
               }
             }
            }
         }
-        // return response()->json(['filtered_products'=>DB::table("products")->whereIn("id",$filtered_products)->orderBy("id","desc")->paginate($request->products_per_page)],200);
-        return response()->json(['filtered_products'=>tap(DB::table("products")->whereIn("id",$filtered_products)->orderBy("id","desc")->paginate($request->products_per_page),function($paginatedInstance){
+        $sort_by = $request->input("sort_by");
+        $filtered_products;
+        switch($sort_by){
+            case 0:
+                $filtered_products = DB::table("products")->whereIn("id",$products_ids)->orderBy("id","desc");
+                break;
+            case 1:
+                $filtered_products = DB::table("products")->whereIn("id",$products_ids)->orderBy("sold","desc");
+                break;
+            case 2:
+                $filtered_products = DB::table("products")->select("products.*","flash_sale.discounted_price as flash_sale_discounted_price")->leftJoin("flash_sale","flash_sale.product_id","=","products.id")->whereIn("products.id",$products_ids)->orderByRaw("(IF(flash_sale_discounted_price,flash_sale_discounted_price,products.discounted_price) / products.price) * 100 DESC");
+                break;
+            case 3:
+                $filtered_products = DB::table("products")->select("products.*","flash_sale.discounted_price as flash_sale_discounted_price")->leftJoin("flash_sale","flash_sale.product_id","=","products.id")->whereIn("products.id",$products_ids)->orderByRaw("products.price - IF(flash_sale_discounted_price,flash_sale_discounted_price,products.discounted_price)");
+                break;
+            case 4:
+                $filtered_products = DB::table("products")->select("products.*","flash_sale.discounted_price as flash_sale_discounted_price")->leftJoin("flash_sale","flash_sale.product_id","=","products.id")->whereIn("products.id",$products_ids)->orderByRaw("products.price - IF(flash_sale_discounted_price,flash_sale_discounted_price,products.discounted_price) DESC");
+                break;    
+        }
+
+        return response()->json(['filtered_products'=>tap($filtered_products->paginate($request->products_per_page),function($paginatedInstance){
             return $paginatedInstance->getCollection()->transform(function ($product) {
                 $product->reviews = array("average_star"=> (float)Review::where("product_id",$product->id)->avg("star"),"total_reviews"=>Review::where("product_id",$product->id)->count());
+                $flash_sale = FlashSale::where("product_id",$product->id)->first();
+                if($flash_sale){
+                    if($flash_sale->start_time < date('Y-m-d H:i:s') && date('Y-m-d H:i:s') < $flash_sale->end_time){
+                        $product->flash_sale = true;
+                        $product->flash_sale_discounted_price = $flash_sale->discounted_price;
+                    }
+                }
                 return $product;
             });
         })],200);
@@ -655,5 +687,26 @@ class ProductController extends Controller
     {
         $product->search_click += 1;
         $product->save();
+    }
+
+    /**
+     * use for build pc only
+     */
+    public function fetchProductsInfo(Request $request)
+    {
+        $res = array();
+        // return $request->product_ids;
+        foreach($request->product_ids as $product_id){
+            $product = Product::find($product_id);
+            $flash_sale = FlashSale::where("product_id",$product->id)->first();
+            if($flash_sale){
+                if($flash_sale->start_time < date('Y-m-d H:i:s') && date('Y-m-d H:i:s') < $flash_sale->end_time){
+                    $product->flash_sale = true;
+                    $product->flash_sale_discounted_price = $flash_sale->discounted_price;
+                }
+            }
+            $res[] = $product;
+        }
+        return $res;
     }
 }

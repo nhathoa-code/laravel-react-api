@@ -67,7 +67,7 @@ class ProductsGroupController extends Controller
     /**
      * Remove the specified resource from storage.
      */
-    public function destroy(ProductsGroup $productsGroup)
+    public function destroy(Request $request,ProductsGroup $productsGroup)
     {
         if (!Gate::forUser($request->user())->allows('manager-action')) {
             return response()->json(["message"=>"Bạn không phải là manager, bạn không có quyền này ?"],403);

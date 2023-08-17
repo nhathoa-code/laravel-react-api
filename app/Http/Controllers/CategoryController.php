@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Models\Category;
 use App\Models\Brand;
 use App\Models\Review;
+use App\Models\FlashSale;
 use App\Models\Product;
 use App\Models\CategoryAttribute;
 use App\Models\CategoryAttributeValue;
@@ -176,11 +177,17 @@ class CategoryController extends Controller
             }
             $category_id = $category->id;
             $data["productIds"] = DB::table("product_categories")->where("category_id",$category_id)->pluck("product_id");
-            // $data["products"] = DB::table("products")->whereIn("id",$data["productIds"])->orderBy("id","desc")->paginate($request->products_per_page);
 
             $data["products"] = tap(DB::table("products")->whereIn("id",$data["productIds"])->orderBy("id","desc")->paginate($request->products_per_page),function($paginatedInstance){
             return $paginatedInstance->getCollection()->transform(function ($product) {
                 $product->reviews = array("average_star"=> (float)Review::where("product_id",$product->id)->avg("star"),"total_reviews"=>Review::where("product_id",$product->id)->count());
+                $flash_sale = FlashSale::where("product_id",$product->id)->first();
+                if($flash_sale){
+                    if($flash_sale->start_time < date('Y-m-d H:i:s') && date('Y-m-d H:i:s') < $flash_sale->end_time){
+                        $product->flash_sale = true;
+                        $product->flash_sale_discounted_price = $flash_sale->discounted_price;
+                    }
+                }
                 return $product;
                 });
             });

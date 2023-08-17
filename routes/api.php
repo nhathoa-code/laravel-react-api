@@ -78,6 +78,7 @@ Route::post("register", [AuthController::class, 'register']);
 Route::post("login", [AuthController::class, 'login']);
 Route::post("logout", [AuthController::class, 'logout'])->middleware("auth:sanctum");
 
+Route::get("products/fetch_products_info",[ProductController::class,'fetchProductsInfo']);
 Route::post("products/increment_view/{product}",[ProductController::class,'incrementView']);
 Route::post("products/increment_search_click/{product}",[ProductController::class,'incrementSearchClick']);
 Route::post("products/filter",[ProductController::class,'filter']);

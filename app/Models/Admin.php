@@ -50,4 +50,12 @@ class Admin extends Authenticatable
         return in_array('author',$roles->toArray());
     }
 
+    public function getIsGuestAttribute()
+    {
+        $roles = $this->roles->map(function($item){
+            return strtolower($item->name);
+        });
+        return in_array('guest',$roles->toArray());
+    }
+
 }
